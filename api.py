@@ -1,18 +1,18 @@
 import fitz  # PyMuPDF for reading PDFs
 import json
 import csv
-import os
-from flask import Flask, request, jsonify, render_template
+import io
+from flask import Flask, request, jsonify, render_template, send_file
 
 app = Flask(__name__)
 
 class PDFProcessor:
-    def __init__(self, file_path):
-        self.file_path = file_path
+    def __init__(self, file):
+        self.file = file
         self.data = {}
 
     def extract_text(self):
-        doc = fitz.open(self.file_path)
+        doc = fitz.open(stream=self.file.read(), filetype="pdf")
         text = ""
         for page in doc:
             text += page.get_text("text") + "\n"
@@ -55,21 +55,26 @@ class PDFProcessor:
         }
         return self.data
 
-    def save_json(self, json_path):
-        with open(json_path, "w") as json_file:
-            json.dump(self.data, json_file, indent=4)
+    def get_json_buffer(self):
+        json_buffer = io.BytesIO()
+        json_buffer.write(json.dumps(self.data, indent=4).encode('utf-8'))
+        json_buffer.seek(0)
+        return json_buffer
 
-    def save_csv(self, csv_path):
-        with open(csv_path, "w", newline="") as csv_file:
-            writer = csv.writer(csv_file)
-            writer.writerow(["Field", "Value"])
-            
-            for key, value in self.data.items():
-                if isinstance(value, dict):
-                    for sub_key, sub_value in value.items():
-                        writer.writerow([f"{key} - {sub_key}", sub_value])
-                else:
-                    writer.writerow([key, value])
+    def get_csv_buffer(self):
+        csv_buffer = io.StringIO()
+        writer = csv.writer(csv_buffer)
+        writer.writerow(["Field", "Value"])
+        
+        for key, value in self.data.items():
+            if isinstance(value, dict):
+                for sub_key, sub_value in value.items():
+                    writer.writerow([f"{key} - {sub_key}", sub_value])
+            else:
+                writer.writerow([key, value])
+        
+        csv_buffer.seek(0)
+        return io.BytesIO(csv_buffer.getvalue().encode('utf-8'))
 
 @app.route("/")
 def index():
@@ -84,26 +89,30 @@ def upload_file():
     if file.filename == "":
         return jsonify({"error": "No selected file"}), 400
     
-    file_path = os.path.join("uploads", file.filename)
-    file.save(file_path)
-    
-    processor = PDFProcessor(file_path)
+    processor = PDFProcessor(file)
     text = processor.extract_text()
     data = processor.parse_text_to_json(text)
     
-    json_path = file_path.replace(".pdf", ".json")
-    csv_path = file_path.replace(".pdf", ".csv")
-    
-    processor.save_json(json_path)
-    processor.save_csv(csv_path)
-    
     return jsonify({
         "message": "File processed successfully",
-        "json_file": json_path,
-        "csv_file": csv_path,
         "data": data
     })
 
+@app.route("/download/json", methods=["POST"])
+def download_json():
+    file = request.files["file"]
+    processor = PDFProcessor(file)
+    text = processor.extract_text()
+    processor.parse_text_to_json(text)
+    return send_file(processor.get_json_buffer(), mimetype="application/json", as_attachment=True, download_name="output.json")
+
+@app.route("/download/csv", methods=["POST"])
+def download_csv():
+    file = request.files["file"]
+    processor = PDFProcessor(file)
+    text = processor.extract_text()
+    processor.parse_text_to_json(text)
+    return send_file(processor.get_csv_buffer(), mimetype="text/csv", as_attachment=True, download_name="output.csv")
+
 if __name__ == "__main__":
-    os.makedirs("uploads", exist_ok=True)
     app.run(debug=True)
