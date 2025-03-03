@@ -50,8 +50,8 @@
                 </thead>
                 <tbody id="dataTable"></tbody>
             </table>
-            <a id="jsonDownload" class="btn btn-success" style="display:none;" target="_blank">Download JSON</a>
-            <a id="csvDownload" class="btn btn-info" style="display:none;" target="_blank">Download CSV</a>
+            <button id="jsonDownload" class="btn btn-success" style="display:none;">Download JSON</button>
+            <button id="csvDownload" class="btn btn-info" style="display:none;">Download CSV</button>
         </div>
     </div>
 </div>
@@ -90,13 +90,38 @@
                     }
                 }
 
-                $("#jsonDownload").attr("href", response.json_file).text("Download JSON").show();
-                $("#csvDownload").attr("href", response.csv_file).text("Download CSV").show();
+                $("#jsonDownload").off("click").on("click", function() {
+                    downloadFile("/download/json", fileInput);
+                }).show();
+
+                $("#csvDownload").off("click").on("click", function() {
+                    downloadFile("/download/csv", fileInput);
+                }).show();
             },
             error: function(xhr) {
                 alert("Error: " + xhr.responseJSON.error);
             }
         });
+    }
+
+    function downloadFile(url, fileInput) {
+        let formData = new FormData();
+        formData.append("file", fileInput);
+
+        fetch(url, {
+            method: "POST",
+            body: formData
+        })
+        .then(response => response.blob())
+        .then(blob => {
+            const link = document.createElement("a");
+            link.href = window.URL.createObjectURL(blob);
+            link.download = url.includes("json") ? "output.json" : "output.csv";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        })
+        .catch(error => alert("Download failed: " + error));
     }
 </script>
 
