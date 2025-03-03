@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Upload PDF & Extract Data</title>
+    
+    <!-- Bootstrap 3 CDN -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
+
+    <style>
+        body {
+            padding-top: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: auto;
+        }
+        #output {
+            display: none;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2 class="text-center">Upload PDF & Extract Data</h2>
+
+    <form id="uploadForm" enctype="multipart/form-data">
+        <div class="form-group">
+            <label for="file">Select PDF File:</label>
+            <input type="file" class="form-control" id="fileInput" name="file">
+        </div>
+        <button type="button" class="btn btn-primary btn-block" onclick="uploadFile()">Upload</button>
+    </form>
+
+    <div id="output" class="panel panel-default">
+        <div class="panel-heading">
+            <h3 class="panel-title">Extracted Data</h3>
+        </div>
+        <div class="panel-body">
+            <table class="table table-bordered">
+                <thead>
+                    <tr>
+                        <th>Field</th>
+                        <th>Value</th>
+                    </tr>
+                </thead>
+                <tbody id="dataTable"></tbody>
+            </table>
+            <a id="jsonDownload" class="btn btn-success" style="display:none;" target="_blank">Download JSON</a>
+            <a id="csvDownload" class="btn btn-info" style="display:none;" target="_blank">Download CSV</a>
+        </div>
+    </div>
+</div>
+
+<script>
+    function uploadFile() {
+        let fileInput = document.getElementById("fileInput").files[0];
+        if (!fileInput) {
+            alert("Please select a file");
+            return;
+        }
+
+        let formData = new FormData();
+        formData.append("file", fileInput);
+
+        $.ajax({
+            url: "/upload",
+            type: "POST",
+            data: formData,
+            contentType: false,
+            processData: false,
+            beforeSend: function() {
+                $("#output").hide();
+            },
+            success: function(response) {
+                $("#output").show();
+                $("#dataTable").empty();
+
+                for (const [key, value] of Object.entries(response.data)) {
+                    if (typeof value === "object") {
+                        for (const [subKey, subValue] of Object.entries(value)) {
+                            $("#dataTable").append(`<tr><td>${key} - ${subKey}</td><td>${subValue}</td></tr>`);
+                        }
+                    } else {
+                        $("#dataTable").append(`<tr><td>${key}</td><td>${value}</td></tr>`);
+                    }
+                }
+
+                $("#jsonDownload").attr("href", response.json_file).text("Download JSON").show();
+                $("#csvDownload").attr("href", response.csv_file).text("Download CSV").show();
+            },
+            error: function(xhr) {
+                alert("Error: " + xhr.responseJSON.error);
+            }
+        });
+    }
+</script>
+
+</body>
+</html>
